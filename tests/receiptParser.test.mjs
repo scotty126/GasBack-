@@ -95,3 +95,14 @@ test('amount: required and must be plausible for the claimed weight', () => {
   assert.equal(withText(GOOD.replace('N18,750.00', '₦18750')).data?.amountNgn, 18750);
   assert.equal(withText(GOOD.replace('Total: N18,750.00', 'GRAND TOTAL NGN 18,750')).data?.amountNgn, 18750);
 });
+
+test('amount: OCR thousands-grouping artefacts (regression from real OCR.space output "N18, 750")', () => {
+  const body = (total) => `TOTALENERGIES IKEJA\nReceipt No: 77881\nDate: 03-10-2026 09:15\nLPG 12.5KG REFILL\nPrice/kg 1,500\n${total}\nPaid: CASH`;
+  const at = (total) => parseReceipt(body(total), NOW);
+  for (const total of ['TOTAL AMOUNT N18, 750', 'TOTAL AMOUNT N18,750', 'TOTAL AMOUNT N18 750', 'TOTAL AMOUNT N18.750', 'TOTAL AMOUNT N18750', 'TOTAL AMOUNT N18,750.00', 'Total: ₦18, 750.00']) {
+    const r = at(total);
+    assert.equal(r.ok, true, `${total} → ${r.message}`);
+    assert.equal(r.data.amountNgn, 18750, total);
+  }
+  assert.equal(at('TOTAL N18.75').code, 'PRICE_IMPLAUSIBLE'); // a genuine ₦18.75 is still a decimal, still implausible for 12.5 kg
+});

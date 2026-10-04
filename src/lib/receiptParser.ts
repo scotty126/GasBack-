@@ -25,8 +25,17 @@ const INVOICE_RE =
   /\b(?:invoice|inv|receipt|rcpt|reference|ref|transaction|trans|txn|bill|order|sale)(?![A-Za-z])[ \t]*(?:no\.?|number|num|#|id)?[ \t]*[:#.\-]?[ \t]*\r?\n?[ \t]*((?=[A-Z0-9\-/]*\d)[A-Z0-9][A-Z0-9\-/]{3,19})\b/i;
 
 // `(?![A-Za-z])` stops label matches inside words ("TotalEnergies", "Refill").
+// Number part tolerates common OCR artefacts in thousands grouping: "18,750", "18, 750" (stray space,
+// seen from OCR.space), "18 750", and dot grouping "18.750" (exactly 3 digits, so "18.75" stays a decimal).
 const AMOUNT_RE =
-  /\b(?:grand[ \t]*total|total(?:[ \t]*amount)?|amount(?:[ \t]*paid)?|net[ \t]*amount|amt|paid)(?![A-Za-z])[^\d\n]{0,14}(?:₦|NGN|N)?[ \t]*(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)/i;
+  /\b(?:grand[ \t]*total|total(?:[ \t]*amount)?|amount(?:[ \t]*paid)?|net[ \t]*amount|amt|paid)(?![A-Za-z])[^\d\n]{0,14}(?:₦|NGN|N)?[ \t]*(\d{1,3}(?:,[ \t]?\d{3})+(?:\.\d{1,2})?|\d{1,3}(?: \d{3})+(?!\d)|\d{1,3}(?:\.\d{3})+(?!\d)|\d+(?:\.\d{1,2})?)/i;
+
+/** "18, 750" → 18750 · "18 750" → 18750 · "18.750" → 18750 · "18,750.00" → 18750 · "18.75" → 18.75 */
+export function parseAmount(raw: string): number {
+  const s = raw.trim();
+  if (/^\d{1,3}(\.\d{3})+$/.test(s)) return parseFloat(s.replace(/\./g, ''));
+  return parseFloat(s.replace(/[,\s]/g, ''));
+}
 
 const MONTHS: Record<string, number> = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12,
@@ -119,7 +128,7 @@ export function parseReceipt(rawText: string, now: Date = new Date()): ParseResu
   }
 
   const amt = AMOUNT_RE.exec(rawText);
-  const amountNgn = amt ? parseFloat(amt[1].replace(/,/g, '')) : NaN;
+  const amountNgn = amt ? parseAmount(amt[1]) : NaN;
   if (!amt || !(amountNgn > 0)) {
     return { ok: false, code: 'NO_AMOUNT', message: 'No total amount found on the receipt.' };
   }
