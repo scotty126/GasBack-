@@ -15,6 +15,14 @@ ON CONFLICT (id) DO UPDATE
       file_size_limit = 10485760,
       allowed_mime_types = ARRAY['image/jpeg','image/png','image/webp','image/heic','image/heif'];
 
+-- Legacy policies from the original setup (found on the live project 2026-10-04 by an
+-- end-to-end test). Policies are OR'd, so these silently defeated the two below:
+--   "Authenticated users can upload"  INSERT, any logged-in user, ANY folder in the bucket
+--   "Public can read receipt images"  SELECT, role public: anyone with the public key could
+--                                     list and download EVERY receipt photo, no login needed
+DROP POLICY IF EXISTS "Authenticated users can upload" ON storage.objects;
+DROP POLICY IF EXISTS "Public can read receipt images" ON storage.objects;
+
 DROP POLICY IF EXISTS "receipt_upload_own_folder" ON storage.objects;
 CREATE POLICY "receipt_upload_own_folder" ON storage.objects
   FOR INSERT TO authenticated
