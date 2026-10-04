@@ -2,6 +2,8 @@
 -- GasBack — Pilot seed (EDIT THE VALUES, then run once in the SQL editor)
 -- Run after migrations/001_hardening.sql.
 --
+-- APPLIED to the live project on 2026-10-04 via the REST API: carbon_params row 1 and one
+-- 'TEST Station (not real)' merchant. The reserve (step 2) is still UNFUNDED. Do not re-run steps 1/3.
 -- Nothing here is run automatically. Until the parameters row and a reserve
 -- funding row exist, the API awards nothing (by design).
 -- Append a new carbon_params row whenever price or FX changes; the latest wins
@@ -18,10 +20,10 @@ VALUES
    DATE '2026-05-26',
    'Fastmarkets cookstove CCP, Sub-Saharan Africa',
    0.500,                       -- 50/50 split: user share
-   1600.00,                     -- !! PLACEHOLDER: replace with the current NGN per USD rate you want to use
-   DATE '2026-10-04',           -- !! set to the date of the rate you enter
+   1329.12,                     -- official CBN NFEM rate on 2026-09-03 (latest found 2026-10-04). Update by inserting a NEW row when it moves.
+   DATE '2026-09-03',           -- date of the rate above
    500,                         -- minimum redemption, in points (₦). Suggestion only.
-   'Initial pilot parameters. fx is a placeholder implied by the plan (₦750–800 ≈ $0.47 per 12.5 kg).');
+   'Initial pilot parameters. FX = official CBN NFEM rate, 2026-09-03.');
 
 -- 2. Fund the reward reserve  ← the maximum ₦ of points the pilot may issue.
 --    Example: ₦5,000,000 = 5,000,000 points. Add more rows to top up.
