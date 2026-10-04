@@ -18,6 +18,12 @@ export async function requireUser(request: Request, db: SupabaseClient): Promise
   try {
     const { data, error } = await db.auth.getUser(match[1].trim());
     if (error || !data.user) {
+      // A bad/disabled SERVER key ("Legacy API keys are disabled", "Invalid API key") is our
+      // misconfiguration, not the user's expired session — don't bounce users to login for it.
+      if (error && /api key/i.test(error.message)) {
+        console.error('[auth] server API key rejected by Supabase:', error.message);
+        return { ok: false, response: NextResponse.json({ error: 'The service is not configured correctly. Please try again later.', code: 'NOT_CONFIGURED' }, { status: 503 }) };
+      }
       // Distinguish a rejected token from Supabase being unreachable.
       const status = error && 'status' in error && typeof error.status === 'number' ? error.status : 0;
       if (status >= 500 || status === 0) {
