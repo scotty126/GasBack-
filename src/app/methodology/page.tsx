@@ -156,7 +156,7 @@ export default async function MethodologyPage() {
           <div className="space-y-4">
             {[
               { step: '01', title: 'Photo checks', desc: 'The photo must be readable, not made in an image editor, and (when the phone records it) taken recently. The exact same image cannot be used twice.' },
-              { step: '02', title: 'Receipt reading', desc: 'Google Cloud Vision reads the text. We extract the cylinder size, invoice number, date and total, and require that the amount paid is plausible for the weight.' },
+              { step: '02', title: 'Receipt reading', desc: 'An OCR service (OCR.space or Google Cloud Vision) reads the text. We extract the cylinder size, invoice number, date and total, and require that the amount paid is plausible for the weight.' },
               { step: '03', title: 'Duplicate check', desc: 'The same invoice at the same vendor cannot earn twice, across all users.' },
               { step: '04', title: 'Award', desc: 'In one database step we re-check for duplicates, confirm the reward reserve can cover the points, record the receipt, credit your points and log the transaction.' },
             ].map(({ step, title, desc }) => (

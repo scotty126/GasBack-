@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import vision from '@google-cloud/vision';
 import { createServiceClient } from '@/lib/supabaseClient';
+import { chooseProvider, readText } from '@/lib/ocr';
 import { requireUser, readDeviceId } from '@/lib/serverAuth';
 import { parseReceipt } from '@/lib/receiptParser';
 import { analyseImage, judgeImage } from '@/lib/imageChecks';
@@ -48,8 +48,7 @@ export async function POST(request: NextRequest) {
     return fail(400, 'Invalid image path.');
   }
 
-  const credsJson = process.env.GOOGLE_CREDENTIALS_JSON;
-  if (!credsJson) {
+  if (!chooseProvider()) {
     return fail(503, 'Receipt reading is not configured yet. Please try again later.', 'NOT_CONFIGURED');
   }
 
@@ -126,17 +125,16 @@ export async function POST(request: NextRequest) {
       return fail(409, 'This receipt has already been submitted and rewarded. Each receipt can only be scanned once.', 'DUPLICATE_RECEIPT');
     }
 
-    // 6. OCR on the bytes we already hold (no URL is ever fetched by Vision).
-    let rawText = '';
-    try {
-      const client = new vision.ImageAnnotatorClient({ credentials: JSON.parse(credsJson) });
-      const [result] = await client.textDetection({ image: { content: buf } });
-      rawText = result.fullTextAnnotation?.text ?? '';
-    } catch (e) {
-      console.error('[scan] vision failed:', e instanceof Error ? e.message : e);
+    // 6. OCR on the bytes we already hold (provider chosen in src/lib/ocr.ts; no URL is ever fetched).
+    const ocr = await readText(buf);
+    if (!ocr.ok) {
+      console.error('[scan] OCR failed:', ocr.code, ocr.message);
       await finish('OCR_ERROR');
-      return fail(503, 'Receipt reading is temporarily unavailable. Please try again shortly.', 'OCR_UNAVAILABLE');
+      return ocr.code === 'OCR_NOT_CONFIGURED'
+        ? fail(503, 'Receipt reading is not configured yet. Please try again later.', 'NOT_CONFIGURED')
+        : fail(503, 'Receipt reading is temporarily unavailable. Please try again shortly.', 'OCR_UNAVAILABLE');
     }
+    const rawText = ocr.text;
     if (rawText.trim().length < 10) {
       await finish('NO_TEXT');
       return fail(422, 'Could not read any text. Make sure the receipt is flat, well lit and fully in frame.', 'NO_TEXT');

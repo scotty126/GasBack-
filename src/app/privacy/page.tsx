@@ -105,7 +105,7 @@ export default function PrivacyPage() {
         <Section title="4. Receipt Image Handling">
           <p>
             Receipt images are uploaded to encrypted cloud storage (Supabase Storage, in a private bucket that only you and our servers can read)
-            solely for OCR text extraction. After text extraction is complete, images are retained for 12 months
+            solely for OCR text extraction by the service named in Section 6. After text extraction is complete, images are retained for 12 months
             for fraud audit purposes and then permanently deleted. You may request earlier deletion at any time
             (see Section 8).
           </p>
@@ -134,7 +134,7 @@ export default function PrivacyPage() {
           <ul className="space-y-2 mt-2">
             {[
               ['Supabase Inc.', 'Authentication, database, file storage'],
-              ['Google Cloud', 'Vision API for receipt OCR text extraction'],
+              ['OCR.space or Google Cloud', 'Reading the text on your receipt photo (OCR). Your receipt photo is sent to whichever of these two services GasBack has switched on. Receipt photos can show shop names and other details printed on the receipt.'],
               ['Vercel Inc.',  'Application hosting and edge delivery'],
             ].map(([name, purpose]) => (
               <li key={String(name)} className="flex gap-3 text-sm">
