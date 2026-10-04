@@ -13,10 +13,9 @@ Turns household LPG adoption into verified carbon credits.
 Nothing below is done by Claude. Grouped by when it blocks you.
 
 **Blocks everything (do first):**
-- [ ] **Create or restore a Supabase project.** The one in `.env.local` (`ptuyegvfpdzrptozfjnu.supabase.co`) returns NXDOMAIN (checked 2026-10-04; paused or deleted). Put the new project's URL + anon key + service-role key in `.env.local` AND Vercel env vars. If the old project(s) still exist (`ptuyegvfpdzrptozfjnu`, and `adppipuzkybzirqlhqyy` that the deleted `/debug` page used), rotate/delete their keys — they were committed in source.
-- [ ] In the new project's SQL editor, run in order: `database/schema.sql` → `database/migrations/001_hardening.sql` → `database/migrations/002_storage.sql`. (Never run schema.sql against data you care about — it DROPs tables.)
-- [ ] **Edit then run `database/seed_pilot.sql`**: carbon price, **the current ₦/US$ rate (1600 in the file is a PLACEHOLDER)**, user share, minimum redemption, and **the reward reserve in ₦ (the file's 0.01 is a deliberate placeholder)**. Until run, the app awards nothing by design (scan returns "rewards not switched on").
-- [ ] The user says a Supabase project is "already connected", but `.env.local` (last modified 2026-06-02) still points at the unresolvable one (re-checked 2026-10-04). Get the new project's URL/anon/service keys into `.env.local` (user pastes them locally — never in chat), then ask Claude to re-verify reachability + tables.
+- [x] ~~Create or restore a Supabase project~~ — **done by the user; verified 2026-10-04**: `ptuyegvfpdzrptozfjnu.supabase.co` resolves again (auth health 200; it was most likely a paused project that got restored — inference). The old keys that were once committed in source still belong to this project: **rotate them** (Supabase → Project Settings → API) and update `.env.local` + Vercel. Not done yet.
+- [ ] **Apply the SQL in the Supabase SQL editor, in this order (paste each file's full contents, Run):** (1) `database/migrations/001_hardening.sql`, (2) `database/migrations/002_storage.sql` (makes the `receipt-uploads` bucket private — it is currently PUBLIC), (3) your edited copy of `database/seed_pilot.sql`. **Do NOT run `database/schema.sql`** on this project — the baseline tables already exist and match it exactly (checked column-by-column); it would only delete the 1 user + 1 wallet row. Live state before applying: only `users`, `wallets`, `receipts`, `transactions` exist; 1 user, 1 wallet (0 points), 0 receipts, 0 transactions; none of the new tables/functions exist.
+- [ ] **In `seed_pilot.sql` set real values:** the current ₦/US$ rate (1600 in the file is a placeholder) and the reward reserve in ₦ (0.01 is a deliberate placeholder). Until run, the app awards nothing by design.
 - [ ] In Supabase Auth settings: add the Vercel domain to redirect URLs; confirm email-confirmation setting and that Google/Apple providers are actually configured (not checked).
 
 **Before any real user:**
@@ -128,7 +127,7 @@ Next, in order:
 - Approach: pre-funded reserve (~$14k/yr at pilot scale); join an existing Gold Standard programme or sell verified data to an aggregator rather than registering alone; seek advance offtake / results-based clean-cooking finance; bring revenue forward via merchant-funded discounts, redemption fee, SaaS.
 
 ## External blockers
-- **Supabase project unreachable** (NXDOMAIN, 2026-10-04) — nothing can be verified live until a project exists. Don't re-diagnose; just needs the owner (TODO).
+- *(resolved 2026-10-04)* Supabase project was unreachable (NXDOMAIN) earlier the same day; the user restored it and it now resolves. Live verification of the new schema/functions is still pending the SQL being applied (TODO). Note: right after a restore, PostgREST returned transient 404 PGRST205 "table not found" errors for tables that exist — wait/retry before concluding tables are missing.
 - No live carbon-price feed available to me; newest dated assessment is May 2026.
 
 ## Conventions
@@ -140,6 +139,7 @@ Next, in order:
 - Test pattern for routes without a live backend: run `next dev` with env pointed at a small fake Supabase HTTP server (needs CORS headers and tolerant body parsing); it proves route logic, not the real database.
 
 ## Changelog
+- **2026-10-04 (Supabase back)** — User said the project was ready. Checked with the keys in `.env.local` (no secrets printed): host resolves, auth health 200; PostgREST OpenAPI lists only `users`, `wallets`, `receipts`, `transactions` (+ an unrelated `rls_auto_enable` rpc); row counts 1/1/0/0, no wallet with points; live columns and enums match `schema.sql` exactly. Storage bucket `receipt-uploads` exists and is `public: true`. Conclusion: apply 001 → 002 → edited seed; do NOT run `schema.sql`. Transient 404s right after restore were a cold schema cache. Not verified: anything beyond metadata/counts (no writes made); the `rls_auto_enable` function (not ours — purpose unknown).
 - **2026-10-04 (push)** — User supplied `https://github.com/scotty126/GasBack-` and asked to proceed. Added remote `origin`; remote was empty (`ls-remote` → no refs); plain `git push -u origin main` (no force) waited on a GitHub sign-in prompt (Git Credential Manager) and then succeeded. Verified: remote `refs/heads/main` = local HEAD `0744d7c`. Re-checked Supabase: `.env.local` unchanged since June, host still unresolvable (HTTP 000), so no tables could be checked. Nothing deployed to Vercel (needs the user's account). This changelog commit is local only until the user approves another push.
 - **2026-10-04 (git)** — `git init -b main`; added `.gitignore` entries (`*.tsbuildinfo`, `.vercel`, `.claude/`, `/plan/`); reviewed the staged list (48 files; no env files/build output) and scanned staged content for both Supabase keys, the old project refs and `BEGIN PRIVATE KEY` → 0 hits; first commit `57d0307`. No remote, nothing pushed, nothing deployed: `gh`/Vercel CLI absent and both need the owner's accounts. Not verified: that a Vercel build with real env vars succeeds (local `next build` does).
 - **2026-10-04 (build session — first five roadmap items)**
