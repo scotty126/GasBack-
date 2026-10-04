@@ -31,3 +31,6 @@ yarn-error.log*
 
 # business plan PDFs: confidential, kept out of the repo (see CLAUDE.md)
 /plan/
+
+.vercel
+.env*
