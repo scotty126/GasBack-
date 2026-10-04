@@ -1,0 +1,26 @@
+{
+  "name": "GasBack — Carbon Points for LPG",
+  "short_name": "GasBack",
+  "description": "Scan your gas receipt. Earn carbon reward points. Redeem for free LPG vouchers.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#16a34a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "utilities"],
+  "lang": "en-NG"
+}

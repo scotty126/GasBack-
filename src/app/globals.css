@@ -1,0 +1,154 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+/* ─── Theme colour tokens ────────────────────────────────────── */
+@layer base {
+
+  /* Dark (default) */
+  html, html.dark {
+    --gb-bg:        #0b0f13;
+    --gb-surface:   #141a21;
+    --gb-elevated:  #1c2533;
+    --gb-border:    rgba(255,255,255,0.08);
+    --gb-text:      #ffffff;
+    --gb-text-muted:#9ca3af;
+    --gb-text-dim:  #6b7280;
+    --outer-bg:     #050708;
+
+    /* RGB channels for opacity-modifier support (e.g. bg-gb-green/10) */
+    --gb-green-rgb: 34 197 94;   /* #22c55e */
+    --gb-gd-rgb:    22 163 74;   /* #16a34a */
+    --gb-gdim-rgb:  13 74  37;   /* #0d4a25 */
+
+    color-scheme: dark;
+  }
+
+  /* Light */
+  html.light {
+    --gb-bg:        #f0f4f8;
+    --gb-surface:   #ffffff;
+    --gb-elevated:  #f1f5f9;
+    --gb-border:    rgba(0,0,0,0.09);
+    --gb-text:      #0f172a;
+    --gb-text-muted:#64748b;
+    --gb-text-dim:  #94a3b8;
+    --outer-bg:     #e2e8f0;
+
+    --gb-green-rgb: 22  163 74;  /* #16a34a */
+    --gb-gd-rgb:    21  128 61;  /* #15803d */
+    --gb-gdim-rgb:  220 252 231; /* #dcfce7 */
+
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    background-color: var(--outer-bg);
+    transition: background-color 0.2s ease;
+  }
+
+  body {
+    @apply bg-gb-bg antialiased;
+    color: var(--gb-text);
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  * { -webkit-overflow-scrolling: touch; }
+  ::-webkit-scrollbar { width: 0; }
+
+  /* ── Light-mode text fixes ────────────────────────────────── */
+  /* text-white on app content should follow the theme */
+  html.light .text-white { color: var(--gb-text); }
+
+  /* Exceptions: explicit white on coloured/green backgrounds */
+  html.light .keep-white                    { color: #fff !important; }
+  html.light .btn-primary                   { color: #fff !important; }
+  html.light [style*="linear-gradient"] .text-white { color: #fff; }
+
+  /* Lighten muted grays for readability on white */
+  html.light .text-gray-400 { color: #64748b; }
+  html.light .text-gray-500 { color: #475569; }
+  html.light .text-gray-600 { color: #334155; }
+  html.light .text-gray-700 { color: #1e293b; }
+}
+
+/* ─── Component styles ───────────────────────────────────────── */
+@layer components {
+
+  .btn-primary {
+    @apply bg-gb-green font-bold py-3.5 px-6 rounded-xl w-full
+           active:scale-95 transition-all duration-150 text-sm
+           disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100
+           flex items-center justify-center gap-2;
+    color: #fff !important;
+  }
+
+  .btn-outline {
+    @apply font-semibold py-3.5 px-6 rounded-xl w-full
+           active:scale-95 transition-all duration-150 text-sm
+           flex items-center justify-center gap-2;
+    border: 1px solid var(--gb-border);
+    background: transparent;
+    color: var(--gb-text);
+  }
+
+  .card {
+    @apply bg-gb-surface rounded-2xl p-4;
+    border: 1px solid var(--gb-border);
+    color: var(--gb-text);
+  }
+
+  .card-elevated {
+    @apply bg-gb-elevated rounded-2xl p-4;
+    border: 1px solid var(--gb-border);
+    color: var(--gb-text);
+  }
+
+  .input-dark {
+    @apply w-full bg-gb-elevated rounded-xl px-4 py-3.5 text-sm
+           focus:outline-none focus:ring-1 focus:ring-gb-green focus:border-gb-green
+           transition-all;
+    border: 1px solid var(--gb-border);
+    color: var(--gb-text);
+  }
+  .input-dark::placeholder { color: var(--gb-text-muted); }
+
+  .badge-verified {
+    @apply bg-gb-green/10 text-gb-green text-[10px] px-2 py-0.5 rounded-full font-semibold;
+  }
+
+  .badge-flagged {
+    @apply bg-orange-500/10 text-orange-400 text-[10px] px-2 py-0.5 rounded-full font-semibold;
+  }
+
+  .divider-text {
+    @apply flex items-center gap-3 text-xs font-medium;
+    color: var(--gb-text-dim);
+  }
+  .divider-text::before,
+  .divider-text::after {
+    content: '';
+    @apply flex-1 h-px;
+    background: var(--gb-border);
+  }
+}
+
+/* ─── Scanning shimmer ───────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+.progress-shimmer {
+  background: linear-gradient(90deg,
+    rgb(var(--gb-green-rgb)) 0%,
+    #4ade80 40%,
+    rgb(var(--gb-green-rgb)) 100%);
+  background-size: 200% auto;
+  animation: shimmer 1.5s linear infinite;
+}
