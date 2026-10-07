@@ -241,7 +241,7 @@ DECLARE
   v_params   carbon_params%ROWTYPE;
   v_wallet   wallets%ROWTYPE;
   v_merchant merchants%ROWTYPE;
-  v_alphabet CONSTANT TEXT := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';  -- 32 chars, no 0/O/1/I/L
+  v_alphabet CONSTANT TEXT := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';  -- 32 chars, no 0/O/1/I
   v_bytes    BYTEA;
   v_code     TEXT;
   v_i        INTEGER;

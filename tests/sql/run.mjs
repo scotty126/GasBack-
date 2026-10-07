@@ -27,16 +27,20 @@ await db.exec(`
   CREATE FUNCTION storage.foldername(name text) RETURNS text[] LANGUAGE sql AS $$ SELECT string_to_array(name, '/') $$;
 `);
 
-console.log('Apply schema.sql + 001 + 002');
+console.log('Apply schema.sql + 001 + 002 + 003');
 const schema = read('database/schema.sql').replace(/CREATE EXTENSION[^;]*;/i, '');
 try {
   await db.exec(schema);
   await db.exec(read('database/migrations/001_hardening.sql'));
   await db.exec(read('database/migrations/002_storage.sql'));
-  ok(true, 'schema + 001 + 002 apply cleanly');
+  await db.exec(read('database/migrations/003_batches_pos.sql'));
+  await db.exec(read('database/migrations/004_partner_portal.sql'));
+  ok(true, 'schema + 001–004 apply cleanly');
   await db.exec(read('database/migrations/001_hardening.sql'));
   await db.exec(read('database/migrations/002_storage.sql'));
-  ok(true, '001 and 002 are re-runnable (idempotent)');
+  await db.exec(read('database/migrations/003_batches_pos.sql'));
+  await db.exec(read('database/migrations/004_partner_portal.sql'));
+  ok(true, '001–004 are re-runnable (idempotent)');
 } catch (e) { ok(false, 'migrations apply', e.message); process.exit(1); }
 
 // Mimic Supabase default table grants for client roles so RLS (not GRANTs) is what's tested.
@@ -171,6 +175,100 @@ console.log('Service role can run both functions');
 await db.exec(`SET ROLE service_role`);
 r = await award({ user: u1, invoice: 'SVC1', sha: 'svc1' });
 ok(r.ok === true, 'service_role can call award_receipt', JSON.stringify(r));
+await db.exec(`RESET ROLE`);
+
+console.log('Carbon batches (migration 003)');
+const batch = (t) => q(`SELECT create_carbon_batch($1) AS r`, [t]).then((x) => x[0].r);
+const unb = async () => (await q(`SELECT count(*)::int c FROM receipts WHERE status='VERIFIED' AND batch_id IS NULL`))[0].c;
+const beforeUnb = await unb();
+r = await batch(1);
+ok(r.ok === false && r.code === 'NOT_ENOUGH_RECEIPTS', 'few receipts → NOT_ENOUGH_RECEIPTS', JSON.stringify(r));
+ok((await unb()) === beforeUnb && (await q(`SELECT count(*)::int c FROM carbon_batches`))[0].c === 0, 'refusal batched/wrote nothing');
+r = await batch(0); ok(r.code === 'INVALID_TARGET', 'target 0 → INVALID_TARGET');
+// 62.7125 kg per 12.5 kg refill → 16 receipts ≥ 1 t.
+const ub = await uid();
+for (let i = 0; i < 20; i++) {
+  const a = await award({ user: ub, invoice: `B${i}`, sha: `bsha${i}` });
+  if (!a.ok) { ok(false, 'setup award for batch test', JSON.stringify(a)); break; }
+}
+const pre = await unb();
+r = await batch(1);
+ok(r.ok === true, 'enough receipts → batch created', JSON.stringify(r));
+ok(Number(r.total_co2e_kg) >= 1000 && Number(r.total_co2e_kg) < 1063, 'batch is ≥1 t and stops at the receipt that crosses it', JSON.stringify(r));
+ok(r.receipt_count === pre - (await unb()), 'batched receipts are exactly the ones now linked');
+ok((await q(`SELECT count(*)::int c FROM receipts WHERE batch_id=$1 AND status='VERIFIED'`, [r.batch_id]))[0].c === r.receipt_count, 'batched receipts remain VERIFIED (still count against reserve)');
+const cb = (await q(`SELECT receipts_digest, status FROM carbon_batches WHERE id=$1`, [r.batch_id]))[0];
+ok(/^[0-9a-f]{64}$/.test(cb.receipts_digest) && cb.status === 'SEALED', 'digest is sha256 hex, status SEALED');
+const again = await batch(1);
+ok(again.ok === false, 'second call cannot re-batch the same receipts', JSON.stringify(again));
+try { await db.exec(`UPDATE carbon_batches SET status='MINTED' WHERE id=${r.batch_id}`); ok(false, 'MINTED without tx hash rejected'); }
+catch { ok(true, 'MINTED requires an on-chain tx hash (CHECK)'); }
+
+console.log('Merchant POS (migration 003)');
+await db.exec(`UPDATE merchants SET vendor_key='seegas' WHERE name='Test Station'`);
+try { await db.exec(`INSERT INTO merchants (name, city, vendor_key) VALUES ('Dup','Abuja','seegas')`); ok(false, 'vendor_key unique'); }
+catch { ok(true, 'vendor_key is unique'); }
+try { await db.exec(`INSERT INTO merchant_pos (merchant_id, endpoint_url, outbound_secret) VALUES ('${m}', 'http://x.test/v', 's')`); ok(false, 'http endpoint rejected'); }
+catch { ok(true, 'POS endpoint must be https (CHECK)'); }
+await db.exec(`INSERT INTO merchant_pos (merchant_id, endpoint_url, outbound_secret) VALUES ('${m}', 'https://pos.test/verify', 'secret')`);
+const rid = (await q(`SELECT id FROM receipts WHERE status='VERIFIED' LIMIT 1`))[0].id;
+await q(`SELECT mark_receipt_pos($1,'CONFIRMED')`, [rid]);
+ok((await q(`SELECT pos_status FROM receipts WHERE id=$1`, [rid]))[0].pos_status === 'CONFIRMED', 'mark_receipt_pos sets CONFIRMED');
+try { await q(`SELECT mark_receipt_pos($1,'BOGUS')`, [rid]); } catch {}
+ok((await q(`SELECT pos_status FROM receipts WHERE id=$1`, [rid]))[0].pos_status === 'CONFIRMED', 'invalid status leaves it unchanged');
+const flaggedId = (await q(`SELECT id FROM receipts WHERE status='FLAGGED' LIMIT 1`))[0].id;
+await q(`SELECT mark_receipt_pos($1,'CONFIRMED')`, [flaggedId]);
+ok((await q(`SELECT pos_status FROM receipts WHERE id=$1`, [flaggedId]))[0].pos_status === null, 'cannot mark a FLAGGED receipt');
+
+console.log('003 permissions as a browser user');
+await db.exec(`SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub', '${u1}', false);`);
+ok((await q(`SELECT count(*)::int c FROM merchant_pos`))[0].c === 0, 'browser cannot read merchant_pos (secret stays private)');
+ok((await q(`SELECT count(*)::int c FROM carbon_batches`))[0].c === 0, 'browser cannot read carbon_batches');
+for (const [name, sql] of [['create_carbon_batch', `SELECT create_carbon_batch(1)`], ['mark_receipt_pos', `SELECT mark_receipt_pos('${rid}','CONFIRMED')`]]) {
+  try { await q(sql); ok(false, `authenticated cannot call ${name}`); }
+  catch (e) { ok(/permission denied/i.test(e.message), `authenticated cannot call ${name}`, e.message); }
+}
+await db.exec(`RESET ROLE`);
+
+console.log('Partner portal (migration 004)');
+await db.exec(`INSERT INTO merchants (name, city) VALUES ('Other Station', 'Abuja')`);
+const mOther = (await q(`SELECT id FROM merchants WHERE name='Other Station'`))[0].id;
+const staff = await uid();
+await db.exec(`INSERT INTO merchant_staff (user_id, merchant_id, role) VALUES ('${staff}', '${m}', 'CASHIER')`);
+const rv = (merchant, code, who = staff) => q(`SELECT redeem_voucher($1,$2,$3) AS r`, [merchant, code, who]).then((x) => x[0].r);
+const stats = (merchant) => q(`SELECT partner_stats($1) AS s`, [merchant]).then((x) => x[0].s);
+const vcode = (await q(`SELECT code FROM vouchers WHERE merchant_id=$1 AND status='ISSUED' ORDER BY created_at LIMIT 1`, [m]))[0].code;
+const st0 = await stats(m);
+ok(Number(st0.redeemed_count) === 0 && Number(st0.outstanding_count) > 200, 'stats before: nothing redeemed, 200+ outstanding', JSON.stringify(st0));
+r = await rv(m, 'GASBACK-AAAAA-AAAAA');            ok(r.code === 'NOT_FOUND', 'unknown code → NOT_FOUND', JSON.stringify(r));
+r = await rv(mOther, vcode);                        ok(r.code === 'NOT_FOUND', 'voucher for another station → NOT_FOUND (same answer as unknown)', JSON.stringify(r));
+ok((await q(`SELECT status FROM vouchers WHERE code=$1`, [vcode]))[0].status === 'ISSUED', 'refusals changed nothing');
+r = await rv(m, vcode);
+ok(r.ok === true && Number(r.naira_value) === 500, 'right station redeems → ok, ₦500', JSON.stringify(r));
+const vr = (await q(`SELECT status, redeemed_at, redeemed_by FROM vouchers WHERE code=$1`, [vcode]))[0];
+ok(vr.status === 'REDEEMED' && vr.redeemed_at && vr.redeemed_by === staff, 'voucher REDEEMED with time and staff id');
+r = await rv(m, vcode);                             ok(r.ok === false && r.code === 'ALREADY_REDEEMED' && r.redeemed_at, 'second redeem → ALREADY_REDEEMED', JSON.stringify(r));
+await db.exec(`UPDATE vouchers SET status='CANCELLED' WHERE id = (SELECT id FROM vouchers WHERE merchant_id='${m}' AND status='ISSUED' LIMIT 1)`);
+const cancelled = (await q(`SELECT code FROM vouchers WHERE status='CANCELLED'`))[0].code;
+r = await rv(m, cancelled);                         ok(r.code === 'NOT_VALID', 'cancelled voucher → NOT_VALID', JSON.stringify(r));
+const st1 = await stats(m);
+ok(Number(st1.redeemed_count) === 1 && Number(st1.redeemed_naira) === 500 && Number(st1.redeemed_today_count) === 1 && Number(st1.redeemed_today_naira) === 500, 'stats after: 1 redeemed, ₦500, counted today', JSON.stringify(st1));
+ok(Number(st1.outstanding_count) === Number(st0.outstanding_count) - 2, 'outstanding dropped by the redeemed + cancelled one');
+const stO = await stats(mOther);                    ok(Number(stO.redeemed_count) === 0 && Number(stO.outstanding_count) === 0, 'other station stats are separate');
+try { await db.exec(`INSERT INTO merchant_staff (user_id, merchant_id, role) VALUES ('${staff}', '${mOther}', 'CASHIER')`); ok(false, 'one station per account'); }
+catch { ok(true, 'an account can be staff of only one station (PK)'); }
+try { await db.exec(`INSERT INTO merchant_staff (user_id, merchant_id, role) VALUES ('${await uid()}', '${m}', 'ROOT')`); ok(false, 'role CHECK'); }
+catch { ok(true, 'unknown staff role rejected'); }
+
+console.log('004 permissions as a browser user');
+await db.exec(`SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub', '${staff}', false);`);
+ok((await q(`SELECT count(*)::int c FROM merchant_staff`))[0].c === 0, 'browser cannot read merchant_staff');
+for (const [name, sql] of [['redeem_voucher', `SELECT redeem_voucher('${m}','GASBACK-AAAAA-AAAAA','${staff}')`], ['partner_stats', `SELECT partner_stats('${m}')`]]) {
+  try { await q(sql); ok(false, `authenticated cannot call ${name}`); }
+  catch (e) { ok(/permission denied/i.test(e.message), `authenticated cannot call ${name}`, e.message); }
+}
+const uv = await db.query(`UPDATE vouchers SET status='REDEEMED' WHERE status='ISSUED'`);
+ok(uv.affectedRows === 0, 'browser cannot mark vouchers redeemed directly (RLS, 0 rows)', String(uv.affectedRows));
 await db.exec(`RESET ROLE`);
 
 console.log(`\n${pass} passed, ${fail} failed`);

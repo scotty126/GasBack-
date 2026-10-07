@@ -32,13 +32,13 @@ function MarketingHeader() {
 const STEPS = [
   { n: '01', title: 'Get in touch',        desc: 'Email us your station details. We are recruiting a small group of stations for the pilot.' },
   { n: '02', title: 'Agree the terms',     desc: 'We agree how and when vouchers you honour are reimbursed before you start. Nothing is assumed.' },
-  { n: '03', title: 'Customers redeem',    desc: 'A customer shows a GASBACK-XXXXX-XXXXX code from their phone at your counter.' },
-  { n: '04', title: 'Apply the discount',  desc: 'You take the voucher amount off their bill. 1 point on the voucher is ₦1.' },
+  { n: '03', title: 'Customers redeem',    desc: 'A customer shows a GASBACK-XXXXX-XXXXX code from their phone. Your attendant enters it in the partner portal, a web page that works on any phone, to check it and mark it used.' },
+  { n: '04', title: 'Apply the discount',  desc: 'Once the portal confirms the code is valid, you take the voucher amount off their bill. 1 point on the voucher is ₦1.' },
 ];
 
 const NOT_YET = [
-  'A partner dashboard and a tool to validate and mark codes as used. Today the code is checked by your attendant and settled with us directly.',
-  'Sales analytics for stations.',
+  'Sales analytics for stations. The portal shows voucher totals only, with no sales data.',
+  "Self-service sign-up. We link your attendants' accounts to your station ourselves.",
   'Automated reimbursement. Settlement is agreed and handled with each partner during the pilot.',
 ];
 

@@ -4,6 +4,7 @@ import { chooseProvider, readText } from '@/lib/ocr';
 import { requireUser, readDeviceId } from '@/lib/serverAuth';
 import { parseReceipt } from '@/lib/receiptParser';
 import { analyseImage, judgeImage } from '@/lib/imageChecks';
+import { verifyWithPos } from '@/lib/posVerify';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -148,6 +149,33 @@ export async function POST(request: NextRequest) {
     }
     const { volumeKg, invoiceNum, vendor, amountNgn, receiptAt } = parsed.data;
 
+    // 7b. Vendor POS cross-check, when the station has one configured (merchants.vendor_key →
+    // merchant_pos). Confirmed → proceed. Not found / mismatch → refuse, no points. POS down →
+    // refuse with "try again" (receipt not used). No POS configured → proceed, recorded NOT_CHECKED.
+    let posStatus: 'CONFIRMED' | 'NOT_CHECKED' = 'NOT_CHECKED';
+    const merchant = await db.from('merchants').select('id').eq('vendor_key', vendor).eq('active', true).maybeSingle();
+    if (merchant.data) {
+      const pos = await db.from('merchant_pos').select('endpoint_url, outbound_secret')
+        .eq('merchant_id', merchant.data.id).eq('is_active', true).maybeSingle();
+      if (pos.data) {
+        const result = await verifyWithPos(
+          { endpointUrl: pos.data.endpoint_url, secret: pos.data.outbound_secret },
+          { invoiceNum, volumeKg, amountNgn, receiptAt },
+          { allowInsecure: process.env.POS_ALLOW_INSECURE === '1' },
+        );
+        if (result.status === 'unavailable') {
+          console.error('[scan] POS unavailable:', result.detail);
+          await finish('POS_UNAVAILABLE');
+          return fail(503, "We couldn't confirm this sale with the station right now. Your receipt was not used — please try again later.", 'POS_UNAVAILABLE');
+        }
+        if (result.status !== 'confirmed') {
+          await finish('POS_NOT_CONFIRMED');
+          return fail(422, "The station's records don't match this receipt, so no points were awarded.", 'POS_NOT_CONFIRMED');
+        }
+        posStatus = 'CONFIRMED';
+      }
+    }
+
     // 8. Atomic award: dedupe + reserve check + receipt + wallet + ledger in one DB transaction.
     const { data: award, error: rpcError } = await db.rpc('award_receipt', {
       p_user_id: userId,
@@ -184,6 +212,9 @@ export async function POST(request: NextRequest) {
           return fail(500, 'Something went wrong. Please try again.');
       }
     }
+
+    const mark = await db.rpc('mark_receipt_pos', { p_receipt_id: award.receipt_id, p_status: posStatus });
+    if (mark.error) console.error('[scan] mark_receipt_pos failed (points already awarded):', mark.error.message);
 
     await finish('VERIFIED');
     const points = Number(award.points);

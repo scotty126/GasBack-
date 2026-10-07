@@ -26,5 +26,8 @@ export function createServiceClient() {
   }
   return createClient(supabaseUrl as string, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
+    // Next.js caches server-side fetches by default; a cached Supabase answer means stale
+    // balances, rate-limit counts and portal totals. Never cache anything the service client reads.
+    global: { fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
   });
 }
